@@ -307,8 +307,8 @@ func (i *IBazel) iteration(command string, commandToRun runnableCommand, targets
 	case QUERY:
 		// Query for which files to watch.
 		log.Logf("Querying for files to watch...")
-		i.watchFiles(fmt.Sprintf(buildQuery, joinedTargets), i.buildFileWatcher)
-		i.watchFiles(fmt.Sprintf(sourceQuery, joinedTargets), i.sourceFileWatcher)
+		i.watchFiles(fmt.Sprintf(buildQuery, joinedTargets), i.buildFileWatcher, false)
+		i.watchFiles(fmt.Sprintf(sourceQuery, joinedTargets), i.sourceFileWatcher, true)
 		i.state = RUN
 	case DEBOUNCE_RUN:
 		select {
@@ -420,7 +420,7 @@ func (i *IBazel) run(targets ...string) (*bytes.Buffer, error) {
 func (i *IBazel) queryRule(rule string) (*blaze_query.Rule, error) {
 	b := i.newBazel()
 
-	res, err := b.Query(rule)
+	res, err := b.Cquery(rule)
 	if err != nil {
 		log.Errorf("Error running Bazel %v", err)
 		osExit(4)
@@ -448,10 +448,17 @@ func (i *IBazel) getInfo() (*map[string]string, error) {
 	return &res, nil
 }
 
-func (i *IBazel) queryForSourceFiles(query string) ([]string, error) {
+func (i *IBazel) queryForSourceFiles(query string, cquery bool) ([]string, error) {
 	b := i.newBazel()
 
-	res, err := b.Query(query)
+	var res *blaze_query.QueryResult
+	var err error
+	if (cquery) {
+		res, err = b.Cquery(query)
+	} else {
+		res, err = b.Query(query)
+
+	}
 	if err != nil {
 		log.Errorf("Bazel query failed: %v", err)
 		return []string{}, err
@@ -486,8 +493,8 @@ func (i *IBazel) queryForSourceFiles(query string) ([]string, error) {
 	return toWatch, nil
 }
 
-func (i *IBazel) watchFiles(query string, watcher fSNotifyWatcher) {
-	toWatch, err := i.queryForSourceFiles(query)
+func (i *IBazel) watchFiles(query string, watcher fSNotifyWatcher, cquery bool) {
+	toWatch, err := i.queryForSourceFiles(query, cquery)
 	if err != nil {
 		// If the query fails, just keep watching the same files as before
 		return
